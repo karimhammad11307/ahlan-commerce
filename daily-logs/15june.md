@@ -5,11 +5,11 @@
 * **Challenges**: Managing the asynchronous connection lifecycle (`mongodb::Client`) and handling manual BSON serialization/deserialization with `serde` without framework abstractions.
 * **Outcome**: Gained insight into driver thread safety and raw query execution, which was initially challenging but highly educational.
 
----
+---Arc<Mutex
 
 ## Afternoon Session: Ahlan Commerce Tasks
 * **Axum Server Setup**: Configured an HTTP server using Axum and Tokio in `tasks/`.
-* **In-Memory State**: Shared product data across handlers using a thread-safe wrapper: `Arc<Mutex<Vec<catalog::Product>>>`.
+* **In-Memory State**: Shared product data across handlers using a thread-safe wrapper: `<Vec<catalog::Product>>>`.
 * **API Endpoints**: 
   * `GET /health` — Simple health check.
   * `GET /api/products` — Fetches the product list.
