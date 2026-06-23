@@ -1,22 +1,6 @@
-mod config;
-mod dtos;
-mod handlers;
-mod routes;
-mod errors;
-
-use axum::{
-    Router,
-    routing::{get, post},
-};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tower_http::trace::TraceLayer;
-
-#[derive(Clone)]
-pub struct AppState {
-    pub config: Arc<config::Config>,
-    pub db_pool: sqlx::PgPool,
-}
+use api::{config, AppState, create_app};
 
 #[tokio::main]
 async fn main() {
@@ -32,21 +16,14 @@ async fn main() {
     let config = config::Config::load();
 
     // Establish connection pool to PostgreSQL
-    let db_pool = sqlx::PgPool::connect(&config.database_url)
-        .await
-        .expect("Failed to connect to database");
+    let db_pool = db::create_pool(&config.database_url);
 
     let shared_state = AppState {
         config: Arc::new(config.clone()),
         db_pool,
     };
 
-    let app = Router::new()
-        .route(routes::HEALTH, get(handlers::health_handler))
-        .route(routes::PRODUCTS, get(handlers::list_products_handler))
-        .route(routes::PRODUCTS, post(handlers::create_product_handler))
-        .layer(TraceLayer::new_for_http())
-        .with_state(shared_state);
+    let app = create_app(shared_state);
 
     // start server
     let addr = format!("127.0.0.1:{}", config.port);

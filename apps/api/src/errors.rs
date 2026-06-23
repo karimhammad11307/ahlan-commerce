@@ -12,6 +12,7 @@ pub enum  AppError{
     DuplicateHandle(String),
 
     // 404 — no product with that id
+    #[allow(dead_code)]
     NotFound(String),
 
     // 500 — something broke on our side
@@ -57,6 +58,27 @@ impl IntoResponse for AppError {
         ))).into_response()
     }
     
+}
+
+use async_graphql::ErrorExtensions;
+
+impl From<AppError> for async_graphql::Error {
+    fn from(err: AppError) -> Self {
+        let (error_code, message) = match &err {
+            AppError::ValidationFailed(msg) => ("validation_failed", msg.clone()),
+            AppError::DuplicateHandle(handle) => (
+                "duplicate_product_handle",
+                format!("a product with handle '{}' already exists", handle),
+            ),
+            AppError::NotFound(msg) => ("not_found", msg.clone()),
+            AppError::Internal(cause) => {
+                tracing::error!(error_code = "internal_error", cause, "internal_error");
+                ("internal_error", "an internal error occurred".to_string())
+            }
+        };
+
+        async_graphql::Error::new(message).extend_with(|_, e| e.set("code", error_code))
+    }
 }
 
 #[cfg(test)] 

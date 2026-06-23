@@ -25,3 +25,9 @@ pub struct ProductResponse {
     pub created_at: String,
     pub updated_at: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProductPublicationRequest {
+    pub published: bool,
+    pub published_at: Option<String>,
+}

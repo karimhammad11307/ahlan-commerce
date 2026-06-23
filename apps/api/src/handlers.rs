@@ -1,47 +1,33 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::{State, Path}, http::StatusCode};
 use serde_json::{Value, json};
 use crate::errors::AppError;
-use crate::{AppState, dtos::{CreateProductRequest, ProductResponse}};
-use sqlx::Row;
+use crate::{AppState, dtos::{CreateProductRequest, ProductResponse, UpdateProductPublicationRequest}};
+
 
 pub async fn health_handler() -> Json<Value> {
     Json(json!({"status": "ok"}))
 }
 
 pub async fn list_products_handler(State(state): State<AppState>) -> Result<Json<Value>, AppError> {
-    let rows = sqlx::query(
-        "SELECT id, title, handle, description, price_cents, inventory_quantity, published, published_at, created_at, updated_at FROM products"
-    )
-    .fetch_all(&state.db_pool)
-    .await
-    .map_err(|e| AppError::Internal(e.to_string()))?;
+    let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
+    
+    let products = db::products::list_products(&**client)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    let responses: Vec<ProductResponse> = rows
-        .iter()
-        .map(|row| {
-            let id: uuid::Uuid = row.get("id");
-            let title: String = row.get("title");
-            let handle: String = row.get("handle");
-            let description: Option<String> = row.get("description");
-            let price_cents: i32 = row.get("price_cents");
-            let inventory_quantity: i32 = row.get("inventory_quantity");
-            let published: bool = row.get("published");
-            let published_at: Option<chrono::DateTime<chrono::Utc>> = row.get("published_at");
-            let created_at: chrono::DateTime<chrono::Utc> = row.get("created_at");
-            let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
-
-            ProductResponse {
-                id: id.to_string(),
-                title,
-                handle,
-                description,
-                price_cents: price_cents as u32,
-                inventory_quantity: inventory_quantity as u32,
-                published,
-                published_at: published_at.map(|t| t.to_rfc3339()),
-                created_at: created_at.to_rfc3339(),
-                updated_at: updated_at.to_rfc3339(),
-            }
+    let responses: Vec<ProductResponse> = products
+        .into_iter()
+        .map(|p| ProductResponse {
+            id: p.id.0.to_string(),
+            title: p.title,
+            handle: p.handle,
+            description: p.description,
+            price_cents: p.price_cents,
+            inventory_quantity: p.inventory_quantity,
+            published: p.published,
+            published_at: p.published_at.map(|t| t.to_rfc3339()),
+            created_at: p.created_at.to_rfc3339(),
+            updated_at: p.updated_at.to_rfc3339(),
         })
         .collect();
 
@@ -87,65 +73,110 @@ pub async fn create_product_handler(
         published: payload.published,
     };
 
-    // call domain logic
-    let new_product = catalog::create_product(domain_input);
+    // Get a database connection from the pool
+    let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
 
-    // Insert product into PostgreSQL
-    let insert_result = sqlx::query(
-        r#"
-        INSERT INTO products (id, title, handle, description, price_cents, inventory_quantity, published, published_at, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        "#
-    )
-    .bind(new_product.id.0)
-    .bind(&new_product.title)
-    .bind(&new_product.handle)
-    .bind(&new_product.description)
-    .bind(new_product.price_cents as i32)
-    .bind(new_product.inventory_quantity as i32)
-    .bind(new_product.published)
-    .bind(new_product.published_at)
-    .bind(new_product.created_at)
-    .bind(new_product.updated_at)
-    .execute(&state.db_pool)
-    .await;
-
-    match insert_result {
-        Ok(_) => {
+    // call domain logic to get the initial product
+    let new_product = match catalog::create_product(domain_input) {
+        Ok(p) => p,
+        Err(e) => return Err(AppError::ValidationFailed(e)),
+    };
+    match db::products::create_product(&**client, new_product).await {
+        Ok(created_product) => {
             tracing::info!(
-                product_id = %new_product.id.0,
-                product_handle = %new_product.handle,
+                product_id = %created_product.id.0,
+                product_handle = %created_product.handle,
                 "product created"
             );
 
             let response_dto = ProductResponse {
-                id: new_product.id.0.to_string(),
-                title: new_product.title,
-                handle: new_product.handle,
-                description: new_product.description,
-                price_cents: new_product.price_cents,
-                inventory_quantity: new_product.inventory_quantity,
-                published: new_product.published,
-                published_at: new_product.published_at.map(|t| t.to_rfc3339()),
-                created_at: new_product.created_at.to_rfc3339(),
-                updated_at: new_product.updated_at.to_rfc3339(),
+                id: created_product.id.0.to_string(),
+                title: created_product.title,
+                handle: created_product.handle,
+                description: created_product.description,
+                price_cents: created_product.price_cents,
+                inventory_quantity: created_product.inventory_quantity,
+                published: created_product.published,
+                published_at: created_product.published_at.map(|t| t.to_rfc3339()),
+                created_at: created_product.created_at.to_rfc3339(),
+                updated_at: created_product.updated_at.to_rfc3339(),
             };
 
             Ok((StatusCode::CREATED, Json(json!({"product": response_dto}))))
         }
         Err(e) => {
-            if let Some(db_err) = e.as_database_error() {
-                // Check if unique key violation occurred (PostgreSQL code 23505)
-                if db_err.code().as_deref() == Some("23505") {
+            if let Some(db_err) = e.as_db_error() {
+                if db_err.code().code() == "23505" {
                     tracing::warn!(
                         error_code = "duplicate_product_handle",
-                        handle = %new_product.handle,
                         "failed to create product: handle already exists"
                     );
-                    return Err(AppError::DuplicateHandle(new_product.handle));
+                    return Err(AppError::DuplicateHandle("Handle already exists".to_string()));
                 }
             }
             Err(AppError::Internal(e.to_string()))
         }
     }
+}
+
+pub async fn list_published_products_handler(State(state): State<AppState>) -> Result<Json<Value>, AppError> {
+    let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let products = db::products::list_published_products(&**client)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let responses: Vec<ProductResponse> = products
+        .into_iter()
+        .map(|p| ProductResponse {
+            id: p.id.0.to_string(),
+            title: p.title,
+            handle: p.handle,
+            description: p.description,
+            price_cents: p.price_cents,
+            inventory_quantity: p.inventory_quantity,
+            published: p.published,
+            published_at: p.published_at.map(|t| t.to_rfc3339()),
+            created_at: p.created_at.to_rfc3339(),
+            updated_at: p.updated_at.to_rfc3339(),
+        })
+        .collect();
+
+    Ok(Json(json!({"products" : responses})))
+}
+
+pub async fn update_product_publication_handler(
+    State(state): State<AppState>,
+    Path(id): Path<uuid::Uuid>,
+    Json(payload): Json<UpdateProductPublicationRequest>,
+) -> Result<Json<Value>, AppError> {
+    let published_at_parsed = match payload.published_at {
+        Some(t) => Some(chrono::DateTime::parse_from_rfc3339(&t)
+            .map_err(|_| AppError::ValidationFailed("invalid published_at timestamp".to_string()))?
+            .with_timezone(&chrono::Utc)),
+        None => None,
+    };
+
+    let updated_at = chrono::Utc::now();
+
+    let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let updated_product = db::products::update_product_publication(&**client, id, payload.published, published_at_parsed, updated_at)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let response_dto = ProductResponse {
+        id: updated_product.id.0.to_string(),
+        title: updated_product.title,
+        handle: updated_product.handle,
+        description: updated_product.description,
+        price_cents: updated_product.price_cents,
+        inventory_quantity: updated_product.inventory_quantity,
+        published: updated_product.published,
+        published_at: updated_product.published_at.map(|t| t.to_rfc3339()),
+        created_at: updated_product.created_at.to_rfc3339(),
+        updated_at: updated_product.updated_at.to_rfc3339(),
+    };
+
+    Ok(Json(json!({"product": response_dto})))
 }

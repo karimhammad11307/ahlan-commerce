@@ -29,3 +29,6 @@ stop:
 	else \
 		echo "Using native PostgreSQL. No container to stop."; \
 	fi
+
+cornucopia-generate:
+	cornucopia generate -d packages/db/src/cornucopia.rs -q db/queries live -u postgres://ahlan:ahlan_dev@localhost:5432/ahlan_commerce

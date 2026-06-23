@@ -30,7 +30,14 @@ pub struct ProductCreate {
 }
 
 // business logic
-pub fn create_product(input: ProductCreate) -> Product {
+pub fn create_product(input: ProductCreate) -> Result<Product, String> {
+    if input.title.trim().is_empty() {
+        return Err("Title cannot be empty".to_string());
+    }
+    if input.handle.trim().is_empty() {
+        return Err("Handle cannot be empty".to_string());
+    }
+    
     let now = Utc::now();
     let published_at = if input.published {
         Some(now)
@@ -38,7 +45,7 @@ pub fn create_product(input: ProductCreate) -> Product {
         None
     };
 
-    Product {
+    Ok(Product {
         id: ProductId(Uuid::now_v7()),
         title: input.title,
         handle: input.handle,
@@ -49,5 +56,37 @@ pub fn create_product(input: ProductCreate) -> Product {
         published_at,
         created_at: now,
         updated_at: now,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_domain_invalid_create_input_rejected() {
+        let input = ProductCreate {
+            title: "".to_string(),
+            handle: "valid-handle".to_string(),
+            description: None,
+            price_cents: 1000,
+            inventory_quantity: 10,
+            published: false,
+        };
+        let result = create_product(input);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Title cannot be empty");
+
+        let input_handle = ProductCreate {
+            title: "Valid Title".to_string(),
+            handle: "".to_string(),
+            description: None,
+            price_cents: 1000,
+            inventory_quantity: 10,
+            published: false,
+        };
+        let result_handle = create_product(input_handle);
+        assert!(result_handle.is_err());
+        assert_eq!(result_handle.unwrap_err(), "Handle cannot be empty");
     }
 }
