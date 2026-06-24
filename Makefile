@@ -3,6 +3,9 @@
 run-api:
 	cargo run -p api
 
+run-worker:
+	cargo run -p worker
+
 test:
 	cargo test
 

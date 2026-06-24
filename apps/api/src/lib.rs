@@ -27,6 +27,7 @@ pub fn create_app(state: AppState) -> Router {
         .route(routes::PUBLISHED_PRODUCTS, get(handlers::list_published_products_handler))
         .route(routes::PRODUCTS, post(handlers::create_product_handler))
         .route(routes::PRODUCT_PUBLICATION, patch(handlers::update_product_publication_handler))
+        .route(routes::IMPORT_JOBS, post(handlers::enqueue_import_job_handler))
         .route("/graphql", post(graphql_handler))
         .layer(axum::Extension(schema))
         .layer(TraceLayer::new_for_http())

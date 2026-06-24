@@ -31,3 +31,19 @@ pub struct UpdateProductPublicationRequest {
     pub published: bool,
     pub published_at: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct EnqueueImportJobRequest {
+    pub input_path: String,
+}
+
+#[derive(Serialize)]
+pub struct ImportJobResponse {
+    pub id: String,
+    pub status: String,
+}
+
+#[derive(Serialize)]
+pub struct EnqueueImportJobResponse {
+    pub job: ImportJobResponse,
+}

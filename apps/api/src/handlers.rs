@@ -180,3 +180,46 @@ pub async fn update_product_publication_handler(
 
     Ok(Json(json!({"product": response_dto})))
 }
+
+pub async fn enqueue_import_job_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::dtos::EnqueueImportJobRequest>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    if payload.input_path.trim().is_empty() {
+        tracing::warn!(
+            error_code = "validation_failed",
+            "request rejected: validation failed"
+        );
+        return Err(AppError::ValidationFailed("input_path cannot be empty".to_string()));
+    }
+
+    let job_id = uuid::Uuid::now_v7();
+    let now = chrono::Utc::now();
+    
+    let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let job = db::import_jobs::insert_import_job(
+        &**client,
+        job_id,
+        db::import_jobs::ImportJobStatus::Queued,
+        &payload.input_path,
+        0,
+        None,
+        now,
+        now,
+    ).await.map_err(|e| AppError::Internal(e.to_string()))?;
+
+    tracing::info!(
+        job_id = %job.id,
+        "import job enqueued"
+    );
+
+    let response_dto = crate::dtos::EnqueueImportJobResponse {
+        job: crate::dtos::ImportJobResponse {
+            id: job.id.to_string(),
+            status: job.status.as_str().to_string(),
+        }
+    };
+
+    Ok((StatusCode::ACCEPTED, Json(serde_json::to_value(response_dto).unwrap())))
+}
