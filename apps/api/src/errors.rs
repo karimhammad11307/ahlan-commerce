@@ -48,14 +48,13 @@ impl IntoResponse for AppError {
         if let AppError::Internal(cause) = &self {
             tracing::error!(error_code,cause,"internal_error");
         }
-        (status, Json(json!(
-            {
-                "error" :{
-                    "code" : error_code,
-                    "message" : message,
-                }
+        let error_response = crate::dtos::ErrorResponse {
+            error: crate::dtos::ErrorDetail {
+                code: error_code.to_string(),
+                message: message.to_string(),
             }
-        ))).into_response()
+        };
+        (status, Json(error_response)).into_response()
     }
     
 }

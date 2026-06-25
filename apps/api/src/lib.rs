@@ -4,6 +4,9 @@ pub mod handlers;
 pub mod routes;
 pub mod errors;
 pub mod graphql;
+pub mod cache;
+pub mod storefront;
+pub mod openapi;
 
 use axum::{
     Router,
@@ -11,18 +14,23 @@ use axum::{
 };
 use tower_http::trace::TraceLayer;
 use std::sync::Arc;
+use utoipa::OpenApi;
+use utoipa_scalar::{Scalar, Servable};
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<config::Config>,
     pub db_pool: db::Pool,
+    pub cache: Arc<cache::CacheClient>,
 }
 
 pub fn create_app(state: AppState) -> Router {
     let schema = graphql::build_schema(state.clone());
 
     Router::new()
+        .merge(Scalar::with_url("/docs/scalar", openapi::ApiDoc::openapi()))
         .route(routes::HEALTH, get(handlers::health_handler))
+        .route(routes::STOREFRONT_PRODUCT, get(storefront::storefront_handler))
         .route(routes::PRODUCTS, get(handlers::list_products_handler))
         .route(routes::PUBLISHED_PRODUCTS, get(handlers::list_published_products_handler))
         .route(routes::PRODUCTS, post(handlers::create_product_handler))

@@ -86,4 +86,16 @@ WHERE id = $5;
 ").await?;
 let _ = client.execute(&stmt, &[&status,&attempts,&last_error,&updated_at,&id]).await?;
 
-Ok(())} } }
+Ok(())} }
+
+pub mod get_product_by_handle { use cornucopia_client::GenericClient;
+use tokio_postgres::Error;
+
+    pub async fn get_product_by_handle<T: GenericClient>(client:&T, handle : &str) -> Result<Option<(uuid::Uuid,String,String,String,i32,i32,bool,time::OffsetDateTime,time::OffsetDateTime,time::OffsetDateTime)>,Error> {let stmt = client.prepare("SELECT id, title, handle, description, price_cents, inventory_quantity, published, published_at, created_at, updated_at
+FROM products
+WHERE handle = $1
+LIMIT 1;
+").await?;
+let res = client.query_opt(&stmt, &[&handle]).await?;
+
+let return_value = res.map(|res| { let return_value_0: uuid::Uuid = res.get(0); let return_value_1: String = res.get(1); let return_value_2: String = res.get(2); let return_value_3: String = res.get(3); let return_value_4: i32 = res.get(4); let return_value_5: i32 = res.get(5); let return_value_6: bool = res.get(6); let return_value_7: time::OffsetDateTime = res.get(7); let return_value_8: time::OffsetDateTime = res.get(8); let return_value_9: time::OffsetDateTime = res.get(9); (return_value_0,return_value_1,return_value_2,return_value_3,return_value_4,return_value_5,return_value_6,return_value_7,return_value_8,return_value_9) }); Ok(return_value)} } }

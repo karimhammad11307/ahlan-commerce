@@ -1,14 +1,29 @@
 use axum::{Json, extract::{State, Path}, http::StatusCode};
 use serde_json::{Value, json};
 use crate::errors::AppError;
-use crate::{AppState, dtos::{CreateProductRequest, ProductResponse, UpdateProductPublicationRequest}};
+use crate::{AppState, dtos::{CreateProductRequest, ProductResponse, UpdateProductPublicationRequest, EnqueueImportJobRequest}};
 
 
+#[utoipa::path(
+    get,
+    path = "/health",
+    responses(
+        (status = 200, description = "API is healthy", body = serde_json::Value)
+    )
+)]
 pub async fn health_handler() -> Json<Value> {
     Json(json!({"status": "ok"}))
 }
 
-pub async fn list_products_handler(State(state): State<AppState>) -> Result<Json<Value>, AppError> {
+#[utoipa::path(
+    get,
+    path = "/api/products",
+    responses(
+        (status = 200, description = "List all products", body = crate::dtos::ListProductsResponse),
+        (status = 500, description = "Internal server error", body = crate::dtos::ErrorResponse)
+    )
+)]
+pub async fn list_products_handler(State(state): State<AppState>) -> Result<Json<crate::dtos::ListProductsResponse>, AppError> {
     let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
     
     let products = db::products::list_products(&**client)
@@ -36,13 +51,24 @@ pub async fn list_products_handler(State(state): State<AppState>) -> Result<Json
         "products listed"
     );
 
-    Ok(Json(json!({"products" : responses})))
+    Ok(Json(crate::dtos::ListProductsResponse { products: responses }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/products",
+    request_body = CreateProductRequest,
+    responses(
+        (status = 201, description = "Product created successfully", body = crate::dtos::SingleProductResponse),
+        (status = 400, description = "Validation failed", body = crate::dtos::ErrorResponse),
+        (status = 409, description = "Duplicate handle", body = crate::dtos::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::dtos::ErrorResponse)
+    )
+)]
 pub async fn create_product_handler(
     State(state): State<AppState>,
     Json(payload): Json<CreateProductRequest>,
-) -> Result<(StatusCode, Json<Value>), AppError> {
+) -> Result<(StatusCode, Json<crate::dtos::SingleProductResponse>), AppError> {
     // validate inputs
     if payload.title.trim().is_empty() {
         tracing::warn!(
@@ -89,6 +115,9 @@ pub async fn create_product_handler(
                 "product created"
             );
 
+            let cache_key = crate::cache::keys::product_page(&created_product.handle);
+            state.cache.cache_delete(&cache_key).await;
+
             let response_dto = ProductResponse {
                 id: created_product.id.0.to_string(),
                 title: created_product.title,
@@ -102,7 +131,7 @@ pub async fn create_product_handler(
                 updated_at: created_product.updated_at.to_rfc3339(),
             };
 
-            Ok((StatusCode::CREATED, Json(json!({"product": response_dto}))))
+            Ok((StatusCode::CREATED, Json(crate::dtos::SingleProductResponse { product: response_dto })))
         }
         Err(e) => {
             if let Some(db_err) = e.as_db_error() {
@@ -119,7 +148,15 @@ pub async fn create_product_handler(
     }
 }
 
-pub async fn list_published_products_handler(State(state): State<AppState>) -> Result<Json<Value>, AppError> {
+#[utoipa::path(
+    get,
+    path = "/api/products/published",
+    responses(
+        (status = 200, description = "List published products", body = crate::dtos::ListProductsResponse),
+        (status = 500, description = "Internal server error", body = crate::dtos::ErrorResponse)
+    )
+)]
+pub async fn list_published_products_handler(State(state): State<AppState>) -> Result<Json<crate::dtos::ListProductsResponse>, AppError> {
     let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
 
     let products = db::products::list_published_products(&**client)
@@ -142,14 +179,27 @@ pub async fn list_published_products_handler(State(state): State<AppState>) -> R
         })
         .collect();
 
-    Ok(Json(json!({"products" : responses})))
+    Ok(Json(crate::dtos::ListProductsResponse { products: responses }))
 }
 
+#[utoipa::path(
+    patch,
+    path = "/api/products/{id}/publication",
+    request_body = UpdateProductPublicationRequest,
+    params(
+        ("id" = String, Path, description = "Product ID UUID")
+    ),
+    responses(
+        (status = 200, description = "Product publication updated", body = crate::dtos::SingleProductResponse),
+        (status = 400, description = "Validation failed", body = crate::dtos::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::dtos::ErrorResponse)
+    )
+)]
 pub async fn update_product_publication_handler(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateProductPublicationRequest>,
-) -> Result<Json<Value>, AppError> {
+) -> Result<Json<crate::dtos::SingleProductResponse>, AppError> {
     let published_at_parsed = match payload.published_at {
         Some(t) => Some(chrono::DateTime::parse_from_rfc3339(&t)
             .map_err(|_| AppError::ValidationFailed("invalid published_at timestamp".to_string()))?
@@ -165,6 +215,9 @@ pub async fn update_product_publication_handler(
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
+    let cache_key = crate::cache::keys::product_page(&updated_product.handle);
+    state.cache.cache_delete(&cache_key).await;
+
     let response_dto = ProductResponse {
         id: updated_product.id.0.to_string(),
         title: updated_product.title,
@@ -178,13 +231,23 @@ pub async fn update_product_publication_handler(
         updated_at: updated_product.updated_at.to_rfc3339(),
     };
 
-    Ok(Json(json!({"product": response_dto})))
+    Ok(Json(crate::dtos::SingleProductResponse { product: response_dto }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/import-jobs",
+    request_body = EnqueueImportJobRequest,
+    responses(
+        (status = 202, description = "Import job enqueued", body = crate::dtos::EnqueueImportJobResponse),
+        (status = 400, description = "Validation failed", body = crate::dtos::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::dtos::ErrorResponse)
+    )
+)]
 pub async fn enqueue_import_job_handler(
     State(state): State<AppState>,
     Json(payload): Json<crate::dtos::EnqueueImportJobRequest>,
-) -> Result<(StatusCode, Json<Value>), AppError> {
+) -> Result<(StatusCode, Json<crate::dtos::EnqueueImportJobResponse>), AppError> {
     if payload.input_path.trim().is_empty() {
         tracing::warn!(
             error_code = "validation_failed",
@@ -221,5 +284,5 @@ pub async fn enqueue_import_job_handler(
         }
     };
 
-    Ok((StatusCode::ACCEPTED, Json(serde_json::to_value(response_dto).unwrap())))
+    Ok((StatusCode::ACCEPTED, Json(response_dto)))
 }

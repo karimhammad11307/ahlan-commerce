@@ -1,13 +1,17 @@
-.PHONY: run-api test db-start db-migrate health start stop
+.PHONY: run-api test db-start db-migrate health start stop redis-health
 
 run-api:
-	cargo run -p api
+	cargo run -p api --bin api
 
 run-worker:
 	cargo run -p worker
 
 test:
 	cargo test
+
+redis-health:
+	redis-cli ping
+
 
 db-start:
 	@if command -v docker >/dev/null 2>&1; then \
@@ -35,3 +39,10 @@ stop:
 
 cornucopia-generate:
 	cornucopia generate -d packages/db/src/cornucopia.rs -q db/queries live -u postgres://ahlan:ahlan_dev@localhost:5432/ahlan_commerce
+
+docs-api:
+	mkdir -p docs/generated
+	cargo run -p api --bin generate_docs
+
+docs-api-check: docs-api
+	git diff --exit-code docs/generated/ || (echo "Error: Generated docs are out of sync. Run 'make docs-api' and commit the changes." && exit 1)

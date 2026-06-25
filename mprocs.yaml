@@ -1,4 +1,6 @@
 procs:
+  redis:
+    shell: "redis-cli monitor"
   api:
     shell: "make run-api"
   postgres:

@@ -1,0 +1,2 @@
+ INFO api::cache: cache miss cache_key="storefront:product-page:new-product"
+DEBUG api::cache: cache set cache_key="storefront:product-page:new-product" ttl=300

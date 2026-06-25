@@ -8,9 +8,13 @@ async fn spawn_test_server() -> (String, reqwest::Client) {
     let config = config::Config::load();
     let db_pool = db::create_pool(&config.database_url);
 
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+    let cache_client = api::cache::CacheClient::new(&redis_url).unwrap();
+
     let state = AppState {
         config: Arc::new(config),
         db_pool,
+        cache: Arc::new(cache_client),
     };
 
     let app = create_app(state);

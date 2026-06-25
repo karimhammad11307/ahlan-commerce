@@ -33,6 +33,10 @@ impl MutationRoot {
                     product_handle = %created_product.handle,
                     "product created via graphql"
                 );
+                
+                let cache_key = crate::cache::keys::product_page(&created_product.handle);
+                state.cache.cache_delete(&cache_key).await;
+
                 Ok(ProductGql::from(created_product))
             }
             Err(e) => {

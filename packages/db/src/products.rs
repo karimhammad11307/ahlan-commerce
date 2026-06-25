@@ -61,6 +61,11 @@ pub async fn list_published_products(client: &impl cornucopia_client::GenericCli
     Ok(rows.into_iter().map(map_product_row).collect())
 }
 
+pub async fn get_product_by_handle(client: &impl cornucopia_client::GenericClient, handle: &str) -> Result<Option<Product>, PostgresError> {
+    let row = queries::get_product_by_handle::get_product_by_handle(client, &handle).await?;
+    Ok(row.map(map_product_row))
+}
+
 pub async fn update_product_publication(
     client: &impl cornucopia_client::GenericClient, 
     id: uuid::Uuid, 

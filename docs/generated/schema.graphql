@@ -1,0 +1,53 @@
+"""
+Implement the DateTime<Utc> scalar
+
+The input/output is a string in RFC3339 format.
+"""
+scalar DateTime
+
+type MutationRoot {
+	productCreate(input: ProductCreateInput!): Product!
+}
+
+type Product {
+	id: ID!
+	title: String!
+	handle: String!
+	description: String
+	priceCents: Int!
+	inventoryQuantity: Int!
+	published: Boolean!
+	publishedAt: DateTime
+	createdAt: DateTime!
+	updatedAt: DateTime!
+}
+
+input ProductCreateInput {
+	title: String!
+	handle: String!
+	description: String
+	priceCents: Int!
+	inventoryQuantity: Int!
+	published: Boolean!
+}
+
+type QueryRoot {
+	products: [Product!]!
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Provides a scalar specification URL for specifying the behavior of custom scalar types.
+"""
+directive @specifiedBy(url: String!) on SCALAR
+schema {
+	query: QueryRoot
+	mutation: MutationRoot
+}
