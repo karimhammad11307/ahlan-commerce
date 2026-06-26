@@ -30,3 +30,21 @@ package-lock.json
 .vite/
 
 .vscode/
+
+skills-lock.json
+
+plan.md
+
+cargo.lock
+
+README.md
+
+cargo.toml
+
+
+.agents/
+
+
+
+
+tasks.md

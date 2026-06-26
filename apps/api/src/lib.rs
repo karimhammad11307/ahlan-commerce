@@ -7,6 +7,7 @@ pub mod graphql;
 pub mod cache;
 pub mod storefront;
 pub mod openapi;
+pub mod compat;
 
 use axum::{
     Router,
@@ -36,6 +37,7 @@ pub fn create_app(state: AppState) -> Router {
         .route(routes::PRODUCTS, post(handlers::create_product_handler))
         .route(routes::PRODUCT_PUBLICATION, patch(handlers::update_product_publication_handler))
         .route(routes::IMPORT_JOBS, post(handlers::enqueue_import_job_handler))
+        .route(routes::COMPAT_PRODUCTS, post(compat::handler::compat_create_product_handler))
         .route("/graphql", post(graphql_handler))
         .layer(axum::Extension(schema))
         .layer(TraceLayer::new_for_http())
