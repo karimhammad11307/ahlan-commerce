@@ -46,3 +46,36 @@ docs-api:
 
 docs-api-check: docs-api
 	git diff --exit-code docs/generated/ || (echo "Error: Generated docs are out of sync. Run 'make docs-api' and commit the changes." && exit 1)
+
+docker-build:
+	docker build -f apps/api/Dockerfile -t ahlan-api:latest .
+
+docker-run-api:
+	docker run \
+		-e DATABASE_URL=$(DATABASE_URL) \
+		-e REDIS_URL=$(REDIS_URL) \
+		-p 3000:3000 \
+		ahlan-api:latest
+
+admin-build:
+	cd apps/admin && npm ci && npm run build
+
+admin-preview:
+	cd apps/admin && npm run preview
+
+prod-up:
+	docker compose -f docker-compose.prod.yml up --build -d
+
+prod-down:
+	docker compose -f docker-compose.prod.yml down
+
+prod-logs:
+	docker compose -f docker-compose.prod.yml logs -f
+
+prod-migrate:
+	docker compose -f docker-compose.prod.yml exec api \
+		sh -c "atlas migrate apply --env production" 2>/dev/null || \
+		echo "Run atlas migrate apply manually with production DATABASE_URL"
+
+prod-health:
+	curl -f http://localhost:3000/health && echo " API healthy"

@@ -13,3 +13,11 @@ env "local" {
   
   url = var.db_url
 }
+
+env "ci" {
+  src = "file://db/schema/products.sql"
+  url = getenv("DATABASE_URL")
+  migration {
+    dir = "file://db/migrations"
+  }
+}

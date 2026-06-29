@@ -6,10 +6,6 @@ use crate::dtos::{
     SingleProductResponse, UpdateProductPublicationRequest,
 };
 
-use crate::handlers::{
-    create_product_handler, enqueue_import_job_handler, health_handler,
-    list_products_handler, list_published_products_handler, update_product_publication_handler,
-};
 
 #[derive(OpenApi)]
 #[openapi(
