@@ -1,10 +1,11 @@
 use axum::http::StatusCode;
-use axum::{Json, response::{IntoResponse, Response}};
-
-
+use axum::{
+    Json,
+    response::{IntoResponse, Response},
+};
 
 #[derive(Debug)]
-pub enum  AppError{
+pub enum AppError {
     //400
     ValidationFailed(String),
 
@@ -12,51 +13,41 @@ pub enum  AppError{
     DuplicateHandle(String),
 
     // 404 — no product with that id
-    #[allow(dead_code)]
     NotFound(String),
 
     // 500 — something broke on our side
     Internal(String),
-
 }
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_code, message) = match &self {
-            AppError::ValidationFailed(msg) => (
-                StatusCode::BAD_REQUEST,
-                "validation_failed",
-                msg.clone(),
-            ),
+            AppError::ValidationFailed(msg) => {
+                (StatusCode::BAD_REQUEST, "validation_failed", msg.clone())
+            }
 
-             AppError::DuplicateHandle(handle) => (
+            AppError::DuplicateHandle(handle) => (
                 StatusCode::CONFLICT,
                 "duplicate_product_handle",
                 format!("a product with handle '{}' already exists", handle),
             ),
-            AppError::NotFound(msg) => (
-                StatusCode::NOT_FOUND,
-                "not_found",
-                msg.clone(),
-            ),
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", msg.clone()),
             AppError::Internal(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal_error",
-
                 "an internal error occurred".to_string(),
             ),
         };
         if let AppError::Internal(cause) = &self {
-            tracing::error!(error_code,cause,"internal_error");
+            tracing::error!(error_code, cause, "internal_error");
         }
         let error_response = crate::dtos::ErrorResponse {
             error: crate::dtos::ErrorDetail {
                 code: error_code.to_string(),
                 message: message.to_string(),
-            }
+            },
         };
         (status, Json(error_response)).into_response()
     }
-    
 }
 
 use async_graphql::ErrorExtensions;
@@ -80,17 +71,16 @@ impl From<AppError> for async_graphql::Error {
     }
 }
 
-#[cfg(test)] 
-mod tests{
+#[cfg(test)]
+mod tests {
     use super::*;
 
     use axum::response::IntoResponse;
     #[tokio::test]
-    async fn validation_error_returns_400(){
+    async fn validation_error_returns_400() {
         let err = AppError::ValidationFailed("title is empty".into());
         let response = err.into_response();
-        assert_eq!(response.status(),StatusCode::BAD_REQUEST);
-
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
@@ -114,5 +104,4 @@ mod tests{
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         // The body must NOT contain the postgres connection string
     }
-    
 }

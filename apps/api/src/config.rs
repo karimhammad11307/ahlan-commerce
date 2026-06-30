@@ -14,10 +14,10 @@ impl Config {
             .and_then(|p| p.parse().ok())
             .unwrap_or(3000);
 
-        let database_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://ahlan:ahlan_dev@localhost:5432/ahlan_commerce".to_string());
+        let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://ahlan:ahlan_dev@localhost:5432/ahlan_commerce".to_string()
+        });
 
         Self { port, database_url }
     }
 }
-

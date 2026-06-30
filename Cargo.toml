@@ -5,3 +5,16 @@ members = [
     "packages/catalog",
     "packages/db",
 ]
+
+[workspace.dependencies]
+catalog = { path = "packages/catalog" }
+chrono = { version = "0.4.39", features = ["serde"] }
+db = { path = "packages/db" }
+dotenvy = "0.15.7"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+tokio = { version = "1.52.3", features = ["full"] }
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-time-0_3"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+uuid = { version = "1.14.0", features = ["v7", "serde"] }

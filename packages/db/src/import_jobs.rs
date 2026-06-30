@@ -1,3 +1,4 @@
+use crate::convert_time_to_chrono;
 use crate::cornucopia::queries;
 use chrono::{DateTime, Utc};
 use time::OffsetDateTime;
@@ -44,11 +45,17 @@ pub struct ImportJob {
     pub updated_at: DateTime<Utc>,
 }
 
-fn convert_time_to_chrono(t: OffsetDateTime) -> DateTime<Utc> {
-    DateTime::from_timestamp(t.unix_timestamp(), t.nanosecond()).unwrap_or_default()
-}
-
-fn map_job_row(row: (Uuid, String, String, i32, String, OffsetDateTime, OffsetDateTime)) -> ImportJob {
+fn map_job_row(
+    row: (
+        Uuid,
+        String,
+        String,
+        i32,
+        String,
+        OffsetDateTime,
+        OffsetDateTime,
+    ),
+) -> ImportJob {
     ImportJob {
         id: row.0,
         status: ImportJobStatus::from_str(&row.1),

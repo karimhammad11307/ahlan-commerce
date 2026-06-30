@@ -5,22 +5,19 @@ edition = "2024"
 
 [dependencies]
 axum = "0.8.9"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
-tokio = { version = "1.52.3", features = ["full"] }
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 tower-http = { version = "0.6.2", features = ["trace"] }
-uuid = { version = "1.14.0", features = ["v7", "serde"] }
-chrono = { version = "0.4.39", features = ["serde"] }
+uuid.workspace = true
+chrono.workspace = true
 tower = { version = "0.5.3", features = ["util"] }
 redis = { version = "0.25", features = ["tokio-comp"] }
-catalog = { path = "../../packages/catalog" }
-db = { path = "../../packages/db" }
-rootcause = "0.13.0"    
-thiserror = "1"
-sqlx = { version = "0.8.3", features = ["runtime-tokio", "postgres", "chrono", "uuid"] }
-dotenvy = "0.15.7"
+catalog.workspace = true
+db.workspace = true
+dotenvy.workspace = true
 async-graphql = { version = "7", features = ["chrono", "uuid"] }
 async-graphql-axum = "7"
 

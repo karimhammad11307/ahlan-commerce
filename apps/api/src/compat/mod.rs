@@ -1,2 +1,2 @@
-pub mod product_adapter;
 pub mod handler;
+pub mod product_adapter;

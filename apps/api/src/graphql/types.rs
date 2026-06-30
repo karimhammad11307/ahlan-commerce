@@ -1,6 +1,6 @@
-use async_graphql::{SimpleObject, InputObject, ID};
-use chrono::{DateTime, Utc};
+use async_graphql::{ID, InputObject, SimpleObject};
 use catalog::Product;
+use chrono::{DateTime, Utc};
 
 #[derive(SimpleObject)]
 #[graphql(name = "Product")]

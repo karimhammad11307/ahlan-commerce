@@ -28,8 +28,10 @@ async fn main() {
 
     tracing::info!("starting Ahlan commerce background worker..");
 
-    let config = api::config::Config::load();
-    let db_pool = db::create_pool(&config.database_url);
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set — see .env.example");
+    let db_pool = db::create_pool(&database_url);
 
     loop {
         if let Err(e) = process_next_job(&db_pool).await {
@@ -75,7 +77,13 @@ async fn process_next_job(db_pool: &db::Pool) -> Result<(), Box<dyn std::error::
                 let new_product = match catalog::create_product(domain_input) {
                     Ok(p) => p,
                     Err(e) => {
-                        handle_job_error(&**client, job.clone(), attempt, format!("Validation error: {}", e)).await?;
+                        handle_job_error(
+                            &**client,
+                            job.clone(),
+                            attempt,
+                            format!("Validation error: {}", e),
+                        )
+                        .await?;
                         return Ok(());
                     }
                 };
@@ -93,11 +101,17 @@ async fn process_next_job(db_pool: &db::Pool) -> Result<(), Box<dyn std::error::
                             e.to_string()
                         };
 
-                        // Duplicate handles should fail the job, but do we retry? 
+                        // Duplicate handles should fail the job, but do we retry?
                         // The contract says: "Duplicate Handles: Do not create a second product. Mark the job failed. Set last_error to a safe message that includes the duplicate handle."
                         // It doesn't say retry duplicate handles. But it says "A job may run at most 3 attempts. Retrying a failed job means changing status back to queued".
                         // Let's just use the standard retry logic.
-                        handle_job_error(&**client, job.clone(), attempt, format!("DB Error: {}", error_msg)).await?;
+                        handle_job_error(
+                            &**client,
+                            job.clone(),
+                            attempt,
+                            format!("DB Error: {}", error_msg),
+                        )
+                        .await?;
                         return Ok(());
                     }
                 }
@@ -118,7 +132,13 @@ async fn process_next_job(db_pool: &db::Pool) -> Result<(), Box<dyn std::error::
         }
         Err(e) => {
             // Missing file makes the job fail
-            fail_job(&**client, job.clone(), attempt, format!("Failed to read file {}: {}", job.input_path, e)).await?;
+            fail_job(
+                &**client,
+                job.clone(),
+                attempt,
+                format!("Failed to read file {}: {}", job.input_path, e),
+            )
+            .await?;
         }
     }
 
@@ -132,7 +152,7 @@ async fn handle_job_error(
     error_msg: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     tracing::warn!(job_id = %job.id, attempt = attempt, error = %error_msg, "job error");
-    
+
     let status = if attempt >= 3 {
         db::import_jobs::ImportJobStatus::Failed
     } else {
@@ -159,7 +179,7 @@ async fn fail_job(
     error_msg: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     tracing::warn!(job_id = %job.id, attempt = attempt, error = %error_msg, "job failed (fatal)");
-    
+
     db::import_jobs::update_job_status(
         client,
         job.id,

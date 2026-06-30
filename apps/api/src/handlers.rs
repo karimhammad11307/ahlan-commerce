@@ -1,8 +1,17 @@
-use axum::{Json, extract::{State, Path}, http::StatusCode};
-use serde_json::{Value, json};
 use crate::errors::AppError;
-use crate::{AppState, dtos::{CreateProductRequest, ProductResponse, UpdateProductPublicationRequest, EnqueueImportJobRequest}};
-
+use crate::{
+    AppState,
+    dtos::{
+        CreateProductRequest, EnqueueImportJobRequest, ProductResponse,
+        UpdateProductPublicationRequest,
+    },
+};
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+};
+use serde_json::{Value, json};
 
 #[utoipa::path(
     get,
@@ -23,9 +32,15 @@ pub async fn health_handler() -> Json<Value> {
         (status = 500, description = "Internal server error", body = crate::dtos::ErrorResponse)
     )
 )]
-pub async fn list_products_handler(State(state): State<AppState>) -> Result<Json<crate::dtos::ListProductsResponse>, AppError> {
-    let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
-    
+pub async fn list_products_handler(
+    State(state): State<AppState>,
+) -> Result<Json<crate::dtos::ListProductsResponse>, AppError> {
+    let client = state
+        .db_pool
+        .get()
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
     let products = db::products::list_products(&**client)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -46,12 +61,11 @@ pub async fn list_products_handler(State(state): State<AppState>) -> Result<Json
         })
         .collect();
 
-    tracing::debug!(
-        count = responses.len(),
-        "products listed"
-    );
+    tracing::debug!(count = responses.len(), "products listed");
 
-    Ok(Json(crate::dtos::ListProductsResponse { products: responses }))
+    Ok(Json(crate::dtos::ListProductsResponse {
+        products: responses,
+    }))
 }
 
 #[utoipa::path(
@@ -76,7 +90,7 @@ pub async fn create_product_handler(
             "request rejected: validation failed"
         );
         return Err(AppError::ValidationFailed(
-            "title cannot be empty".to_string()
+            "title cannot be empty".to_string(),
         ));
     }
     if payload.handle.trim().is_empty() {
@@ -85,7 +99,7 @@ pub async fn create_product_handler(
             "request rejected: validation failed"
         );
         return Err(AppError::ValidationFailed(
-            "handle cannot be empty".to_string()
+            "handle cannot be empty".to_string(),
         ));
     }
 
@@ -100,7 +114,11 @@ pub async fn create_product_handler(
     };
 
     // Get a database connection from the pool
-    let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
+    let client = state
+        .db_pool
+        .get()
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     // call domain logic to get the initial product
     let new_product = match catalog::create_product(domain_input) {
@@ -131,7 +149,12 @@ pub async fn create_product_handler(
                 updated_at: created_product.updated_at.to_rfc3339(),
             };
 
-            Ok((StatusCode::CREATED, Json(crate::dtos::SingleProductResponse { product: response_dto })))
+            Ok((
+                StatusCode::CREATED,
+                Json(crate::dtos::SingleProductResponse {
+                    product: response_dto,
+                }),
+            ))
         }
         Err(e) => {
             if let Some(db_err) = e.as_db_error() {
@@ -140,7 +163,9 @@ pub async fn create_product_handler(
                         error_code = "duplicate_product_handle",
                         "failed to create product: handle already exists"
                     );
-                    return Err(AppError::DuplicateHandle("Handle already exists".to_string()));
+                    return Err(AppError::DuplicateHandle(
+                        "Handle already exists".to_string(),
+                    ));
                 }
             }
             Err(AppError::Internal(e.to_string()))
@@ -156,8 +181,14 @@ pub async fn create_product_handler(
         (status = 500, description = "Internal server error", body = crate::dtos::ErrorResponse)
     )
 )]
-pub async fn list_published_products_handler(State(state): State<AppState>) -> Result<Json<crate::dtos::ListProductsResponse>, AppError> {
-    let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
+pub async fn list_published_products_handler(
+    State(state): State<AppState>,
+) -> Result<Json<crate::dtos::ListProductsResponse>, AppError> {
+    let client = state
+        .db_pool
+        .get()
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     let products = db::products::list_published_products(&**client)
         .await
@@ -179,7 +210,9 @@ pub async fn list_published_products_handler(State(state): State<AppState>) -> R
         })
         .collect();
 
-    Ok(Json(crate::dtos::ListProductsResponse { products: responses }))
+    Ok(Json(crate::dtos::ListProductsResponse {
+        products: responses,
+    }))
 }
 
 #[utoipa::path(
@@ -201,19 +234,33 @@ pub async fn update_product_publication_handler(
     Json(payload): Json<UpdateProductPublicationRequest>,
 ) -> Result<Json<crate::dtos::SingleProductResponse>, AppError> {
     let published_at_parsed = match payload.published_at {
-        Some(t) => Some(chrono::DateTime::parse_from_rfc3339(&t)
-            .map_err(|_| AppError::ValidationFailed("invalid published_at timestamp".to_string()))?
-            .with_timezone(&chrono::Utc)),
+        Some(t) => Some(
+            chrono::DateTime::parse_from_rfc3339(&t)
+                .map_err(|_| {
+                    AppError::ValidationFailed("invalid published_at timestamp".to_string())
+                })?
+                .with_timezone(&chrono::Utc),
+        ),
         None => None,
     };
 
     let updated_at = chrono::Utc::now();
 
-    let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
-
-    let updated_product = db::products::update_product_publication(&**client, id, payload.published, published_at_parsed, updated_at)
+    let client = state
+        .db_pool
+        .get()
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let updated_product = db::products::update_product_publication(
+        &**client,
+        id,
+        payload.published,
+        published_at_parsed,
+        updated_at,
+    )
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
 
     let cache_key = crate::cache::keys::product_page(&updated_product.handle);
     state.cache.cache_delete(&cache_key).await;
@@ -231,7 +278,9 @@ pub async fn update_product_publication_handler(
         updated_at: updated_product.updated_at.to_rfc3339(),
     };
 
-    Ok(Json(crate::dtos::SingleProductResponse { product: response_dto }))
+    Ok(Json(crate::dtos::SingleProductResponse {
+        product: response_dto,
+    }))
 }
 
 #[utoipa::path(
@@ -253,13 +302,19 @@ pub async fn enqueue_import_job_handler(
             error_code = "validation_failed",
             "request rejected: validation failed"
         );
-        return Err(AppError::ValidationFailed("input_path cannot be empty".to_string()));
+        return Err(AppError::ValidationFailed(
+            "input_path cannot be empty".to_string(),
+        ));
     }
 
     let job_id = uuid::Uuid::now_v7();
     let now = chrono::Utc::now();
-    
-    let client = state.db_pool.get().await.map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let client = state
+        .db_pool
+        .get()
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     let job = db::import_jobs::insert_import_job(
         &**client,
@@ -270,7 +325,9 @@ pub async fn enqueue_import_job_handler(
         None,
         now,
         now,
-    ).await.map_err(|e| AppError::Internal(e.to_string()))?;
+    )
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
 
     tracing::info!(
         job_id = %job.id,
@@ -281,7 +338,7 @@ pub async fn enqueue_import_job_handler(
         job: crate::dtos::ImportJobResponse {
             id: job.id.to_string(),
             status: job.status.as_str().to_string(),
-        }
+        },
     };
 
     Ok((StatusCode::ACCEPTED, Json(response_dto)))

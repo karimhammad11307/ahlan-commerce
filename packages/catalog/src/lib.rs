@@ -37,13 +37,9 @@ pub fn create_product(input: ProductCreate) -> Result<Product, String> {
     if input.handle.trim().is_empty() {
         return Err("Handle cannot be empty".to_string());
     }
-    
+
     let now = Utc::now();
-    let published_at = if input.published {
-        Some(now)
-    } else {
-        None
-    };
+    let published_at = if input.published { Some(now) } else { None };
 
     Ok(Product {
         id: ProductId(Uuid::now_v7()),

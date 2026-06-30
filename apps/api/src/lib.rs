@@ -1,20 +1,20 @@
+pub mod cache;
+pub mod compat;
 pub mod config;
 pub mod dtos;
-pub mod handlers;
-pub mod routes;
 pub mod errors;
 pub mod graphql;
-pub mod cache;
-pub mod storefront;
+pub mod handlers;
 pub mod openapi;
-pub mod compat;
+pub mod routes;
+pub mod storefront;
 
 use axum::{
     Router,
-    routing::{get, post, patch},
+    routing::{get, patch, post},
 };
-use tower_http::trace::TraceLayer;
 use std::sync::Arc;
+use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_scalar::{Scalar, Servable};
 
@@ -31,13 +31,28 @@ pub fn create_app(state: AppState) -> Router {
     Router::new()
         .merge(Scalar::with_url("/docs/scalar", openapi::ApiDoc::openapi()))
         .route(routes::HEALTH, get(handlers::health_handler))
-        .route(routes::STOREFRONT_PRODUCT, get(storefront::storefront_handler))
+        .route(
+            routes::STOREFRONT_PRODUCT,
+            get(storefront::storefront_handler),
+        )
         .route(routes::PRODUCTS, get(handlers::list_products_handler))
-        .route(routes::PUBLISHED_PRODUCTS, get(handlers::list_published_products_handler))
+        .route(
+            routes::PUBLISHED_PRODUCTS,
+            get(handlers::list_published_products_handler),
+        )
         .route(routes::PRODUCTS, post(handlers::create_product_handler))
-        .route(routes::PRODUCT_PUBLICATION, patch(handlers::update_product_publication_handler))
-        .route(routes::IMPORT_JOBS, post(handlers::enqueue_import_job_handler))
-        .route(routes::COMPAT_PRODUCTS, post(compat::handler::compat_create_product_handler))
+        .route(
+            routes::PRODUCT_PUBLICATION,
+            patch(handlers::update_product_publication_handler),
+        )
+        .route(
+            routes::IMPORT_JOBS,
+            post(handlers::enqueue_import_job_handler),
+        )
+        .route(
+            routes::COMPAT_PRODUCTS,
+            post(compat::handler::compat_create_product_handler),
+        )
         .route("/graphql", post(graphql_handler))
         .layer(axum::Extension(schema))
         .layer(TraceLayer::new_for_http())

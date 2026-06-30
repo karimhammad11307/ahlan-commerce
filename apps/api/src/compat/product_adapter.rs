@@ -1,5 +1,5 @@
-use serde::Deserialize;
 use crate::errors::AppError;
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct ExternalProductPayload {
@@ -13,27 +13,32 @@ pub struct ExternalProductPayload {
     pub is_active: Option<bool>,
 }
 
-pub fn adapt_external_product(payload: ExternalProductPayload) -> Result<catalog::ProductCreate, AppError> {
+pub fn adapt_external_product(
+    payload: ExternalProductPayload,
+) -> Result<catalog::ProductCreate, AppError> {
     if payload.name.trim().is_empty() {
-        return Err(AppError::ValidationFailed("name cannot be empty".to_string()));
-    }
-    
-    if payload.slug.trim().is_empty() {
-        return Err(AppError::ValidationFailed("slug cannot be empty".to_string()));
-    }
-    
-    let price_f64 = payload.price.parse::<f64>().unwrap_or(-1.0);
-    if price_f64 < 0.0 {
-        return Err(AppError::ValidationFailed("price cannot be negative or invalid".to_string()));
+        return Err(AppError::ValidationFailed(
+            "name cannot be empty".to_string(),
+        ));
     }
 
-    let description = payload.body_html.and_then(|s| {
-        if s.trim().is_empty() {
-            None
-        } else {
-            Some(s)
-        }
-    });
+    if payload.slug.trim().is_empty() {
+        return Err(AppError::ValidationFailed(
+            "slug cannot be empty".to_string(),
+        ));
+    }
+
+    let price_f64 = payload.price.parse::<f64>().unwrap_or(-1.0);
+    if price_f64 < 0.0 {
+        return Err(AppError::ValidationFailed(
+            "price cannot be negative or invalid".to_string(),
+        ));
+    }
+
+    let description =
+        payload
+            .body_html
+            .and_then(|s| if s.trim().is_empty() { None } else { Some(s) });
 
     let price_cents = (price_f64 * 100.0).round() as u32;
     let published = payload.is_active.unwrap_or(false);

@@ -1,40 +1,11 @@
-use api::{AppState, config, create_app};
-use std::sync::Arc;
-use tokio::net::TcpListener;
-use serde_json::{json, Value};
+mod helpers;
+
+use serde_json::{Value, json};
 use uuid::Uuid;
-
-async fn spawn_test_server() -> (String, reqwest::Client) {
-    let config = config::Config::load();
-    let db_pool = db::create_pool(&config.database_url);
-
-    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
-    let cache_client = api::cache::CacheClient::new(&redis_url).unwrap();
-
-    let state = AppState {
-        config: Arc::new(config),
-        db_pool,
-        cache: Arc::new(cache_client),
-    };
-
-    let app = create_app(state);
-
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
-
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
-
-    let client = reqwest::Client::new();
-    let address = format!("http://127.0.0.1:{}", port);
-
-    (address, client)
-}
 
 #[tokio::test]
 async fn test_products_query() {
-    let (addr, client) = spawn_test_server().await;
+    let (addr, client) = helpers::spawn_test_server().await;
 
     // First ensure there is at least one product
     let handle = format!("graphql-query-{}", Uuid::now_v7());
@@ -65,20 +36,20 @@ async fn test_products_query() {
 
     assert_eq!(response.status(), 200);
     let body: Value = response.json().await.unwrap();
-    
+
     // Check there are no errors
     assert!(body.get("errors").is_none());
-    
+
     let products = body["data"]["products"].as_array().unwrap();
     assert!(products.len() > 0);
-    
+
     let found = products.iter().any(|p| p["handle"] == handle);
     assert!(found, "Product should be retrievable via GraphQL");
 }
 
 #[tokio::test]
 async fn test_product_create_mutation() {
-    let (addr, client) = spawn_test_server().await;
+    let (addr, client) = helpers::spawn_test_server().await;
 
     let handle = format!("graphql-mutation-{}", Uuid::now_v7());
     let query = json!({
@@ -104,9 +75,9 @@ async fn test_product_create_mutation() {
 
     assert_eq!(response.status(), 200);
     let body: Value = response.json().await.unwrap();
-    
+
     assert!(body.get("errors").is_none());
-    
+
     let product = &body["data"]["productCreate"];
     assert_eq!(product["title"], "Mutation Created Product");
     assert_eq!(product["handle"], handle);
@@ -119,7 +90,7 @@ async fn test_product_create_mutation() {
 
 #[tokio::test]
 async fn test_validation_error_returns_error_code() {
-    let (addr, client) = spawn_test_server().await;
+    let (addr, client) = helpers::spawn_test_server().await;
 
     let handle = format!("graphql-validation-{}", Uuid::now_v7());
     let query = json!({
@@ -144,10 +115,10 @@ async fn test_validation_error_returns_error_code() {
 
     assert_eq!(response.status(), 200); // GraphQL typically returns 200 for errors too
     let body: Value = response.json().await.unwrap();
-    
+
     let errors = body["errors"].as_array().expect("Expected errors array");
     assert!(errors.len() > 0);
-    
+
     let error = &errors[0];
     assert_eq!(error["message"], "Title cannot be empty");
     assert_eq!(error["extensions"]["code"], "validation_failed");

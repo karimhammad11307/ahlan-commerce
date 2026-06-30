@@ -1,18 +1,17 @@
 [package]
 name = "db"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-sqlx = { version = "0.8.3", features = ["postgres", "runtime-tokio", "uuid", "chrono"] }
 cornucopia_client = "0.1.0"
-tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-time-0_3"] }
+tokio-postgres.workspace = true
 postgres-types = { version = "0.2.6", features = ["derive"] }
-uuid = { version = "1.7.0", features = ["v7", "serde"] }
-chrono = { version = "0.4.38", features = ["serde"] }
+uuid.workspace = true
+chrono.workspace = true
 time = "0.3.36"
-catalog = { path = "../catalog" }
+catalog.workspace = true
 deadpool-postgres = "0.10.5"
 
 [dev-dependencies]
-tokio = { version = "1.52.3", features = ["full"] }
+tokio.workspace = true

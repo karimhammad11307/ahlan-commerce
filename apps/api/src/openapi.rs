@@ -2,10 +2,9 @@ use utoipa::OpenApi;
 
 use crate::dtos::{
     CreateProductRequest, EnqueueImportJobRequest, EnqueueImportJobResponse, ErrorDetail,
-    ErrorResponse, ImportJobResponse, ListProductsResponse, ProductResponse,
-    SingleProductResponse, UpdateProductPublicationRequest,
+    ErrorResponse, ImportJobResponse, ListProductsResponse, ProductResponse, SingleProductResponse,
+    UpdateProductPublicationRequest,
 };
-
 
 #[derive(OpenApi)]
 #[openapi(

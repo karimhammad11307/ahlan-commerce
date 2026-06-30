@@ -1,10 +1,10 @@
 procs:
   redis:
-    shell: "redis-cli monitor"
+    shell: ".bin/host-exec redis-cli monitor"
   api:
     shell: "make run-api"
   postgres:
-    shell: "make db-start && (docker logs -f ahlan_db 2>/dev/null || tail -f /var/log/postgresql/postgresql-16-main.log || tail -f /var/log/postgresql/postgresql-*-main.log || echo 'Cannot tail native postgres logs. Native postgres is running.')"
+    shell: "make db-start && .bin/host-exec docker logs -f ahlan_db"
   admin:
     shell: "cd apps/admin && npm run dev"
   worker:

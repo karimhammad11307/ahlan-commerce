@@ -90,22 +90,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_set_and_get() {
-        let client = CacheClient::new("redis://127.0.0.1:6379").expect("Failed to connect to redis");
+        let client =
+            CacheClient::new("redis://127.0.0.1:6379").expect("Failed to connect to redis");
         let key = "test:set_get";
         let value = "test_value";
-        
+
         client.cache_set(key, value, 10).await;
         let result = client.cache_get(key).await;
         assert_eq!(result, Some(value.to_string()));
-        
+
         client.cache_delete(key).await;
     }
 
     #[tokio::test]
     async fn test_cache_get_miss() {
-        let client = CacheClient::new("redis://127.0.0.1:6379").expect("Failed to connect to redis");
+        let client =
+            CacheClient::new("redis://127.0.0.1:6379").expect("Failed to connect to redis");
         let key = "test:miss";
-        
+
         client.cache_delete(key).await;
         let result = client.cache_get(key).await;
         assert_eq!(result, None);
@@ -113,10 +115,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_delete() {
-        let client = CacheClient::new("redis://127.0.0.1:6379").expect("Failed to connect to redis");
+        let client =
+            CacheClient::new("redis://127.0.0.1:6379").expect("Failed to connect to redis");
         let key = "test:delete";
         let value = "test_value";
-        
+
         client.cache_set(key, value, 10).await;
         client.cache_delete(key).await;
         let result = client.cache_get(key).await;

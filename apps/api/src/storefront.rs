@@ -1,11 +1,11 @@
+use crate::errors::AppError;
+use crate::AppState;
 use axum::{
     extract::{Path, State},
-    response::{Html, IntoResponse},
-    http::StatusCode,
+    response::Html,
 };
-use crate::AppState;
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+use tracing::warn;
 
 // --- CACHE LAYER SHAPE ---
 #[derive(Serialize, Deserialize)]
@@ -25,8 +25,15 @@ struct RenderContext {
     updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-async fn build_context(state: &AppState, handle: &str) -> Result<Option<RenderContext>, crate::errors::AppError> {
-    let client = state.db_pool.get().await.map_err(|e| crate::errors::AppError::Internal(e.to_string()))?;
+async fn build_context(
+    state: &AppState,
+    handle: &str,
+) -> Result<Option<RenderContext>, crate::errors::AppError> {
+    let client = state
+        .db_pool
+        .get()
+        .await
+        .map_err(|e| crate::errors::AppError::Internal(e.to_string()))?;
 
     let product = match db::products::get_product_by_handle(&**client, handle).await {
         Ok(Some(p)) => p,
@@ -69,44 +76,39 @@ fn render_html(ctx: &RenderContext) -> String {
 pub async fn storefront_handler(
     State(state): State<AppState>,
     Path(handle): Path<String>,
-) -> axum::response::Response {
+) -> Result<Html<String>, AppError> {
     let cache_key = crate::cache::keys::product_page(&handle);
 
     // 1. Try Redis GET
     if let Some(cached_json) = state.cache.cache_get(&cache_key).await {
         if let Ok(cached_page) = serde_json::from_str::<CachedProductPage>(&cached_json) {
-            return Html(cached_page.html).into_response();
-        } else {
-            // Invalid JSON in cache, we will fall through to db read
-            warn!(cache_key = %cache_key, "invalid json in cache, falling back to db");
+            return Ok(Html(cached_page.html));
         }
+        warn!(cache_key = %cache_key, "invalid json in cache, falling back to db");
     }
 
     // 2. Cache Miss or Fallback -> Build Context
-    let ctx_result = build_context(&state, &handle).await;
-    match ctx_result {
-        Ok(Some(ctx)) => {
-            // 3. Render HTML
-            let html = render_html(&ctx);
-            
-            let cache_payload = CachedProductPage {
-                html: html.clone(),
-                product_id: ctx.product_id,
-                product_updated_at: ctx.updated_at.to_rfc3339(),
-                rendered_at: chrono::Utc::now().to_rfc3339(),
-            };
+    let ctx = build_context(&state, &handle)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Product not found".into()))?;
 
-            // 4. Save to Redis (fire and forget)
-            if let Ok(json_str) = serde_json::to_string(&cache_payload) {
-                state.cache.cache_set(&cache_key, &json_str, crate::cache::PRODUCT_PAGE_TTL).await;
-            }
+    // 3. Render HTML
+    let html = render_html(&ctx);
 
-            Html(html).into_response()
-        }
-        Ok(None) => (StatusCode::NOT_FOUND, "Product not found").into_response(),
-        Err(e) => {
-            error!(error = ?e, "internal server error during storefront render");
-            (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
-        }
+    let cache_payload = CachedProductPage {
+        html: html.clone(),
+        product_id: ctx.product_id,
+        product_updated_at: ctx.updated_at.to_rfc3339(),
+        rendered_at: chrono::Utc::now().to_rfc3339(),
+    };
+
+    // 4. Save to Redis (fire and forget)
+    if let Ok(json_str) = serde_json::to_string(&cache_payload) {
+        state
+            .cache
+            .cache_set(&cache_key, &json_str, crate::cache::PRODUCT_PAGE_TTL)
+            .await;
     }
+
+    Ok(Html(html))
 }

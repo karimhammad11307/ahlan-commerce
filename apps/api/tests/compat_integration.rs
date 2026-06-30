@@ -1,41 +1,11 @@
+mod helpers;
+
 use axum::http::StatusCode;
 use serde_json::json;
 
-use api::{AppState, config, create_app};
-use std::sync::Arc;
-use tokio::net::TcpListener;
-
-async fn spawn_test_server() -> (String, reqwest::Client) {
-    let config = config::Config::load();
-    let db_pool = db::create_pool(&config.database_url);
-
-    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
-    let cache_client = api::cache::CacheClient::new(&redis_url).unwrap();
-
-    let state = AppState {
-        config: Arc::new(config),
-        db_pool,
-        cache: Arc::new(cache_client),
-    };
-
-    let app = create_app(state);
-
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
-
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
-
-    let client = reqwest::Client::new();
-    let address = format!("http://127.0.0.1:{}", port);
-
-    (address, client)
-}
-
 #[tokio::test]
 async fn test_compat_create_valid_payload_returns_201() {
-    let (addr, client) = spawn_test_server().await;
+    let (addr, client) = helpers::spawn_test_server().await;
 
     let payload = json!({
         "name": "Integration Coffee Mug",
@@ -57,7 +27,7 @@ async fn test_compat_create_valid_payload_returns_201() {
 
     let body: serde_json::Value = response.json().await.unwrap();
     let product = &body["product"];
-    
+
     assert_eq!(product["title"], "Integration Coffee Mug");
     assert_eq!(product["description"], "Ceramic mug");
     assert_eq!(product["price_cents"], 2500);
@@ -67,7 +37,7 @@ async fn test_compat_create_valid_payload_returns_201() {
 
 #[tokio::test]
 async fn test_compat_create_blank_name_returns_400() {
-    let (addr, client) = spawn_test_server().await;
+    let (addr, client) = helpers::spawn_test_server().await;
 
     let payload = json!({
         "name": "   ",
@@ -90,10 +60,10 @@ async fn test_compat_create_blank_name_returns_400() {
 
 #[tokio::test]
 async fn test_compat_create_duplicate_slug_returns_409() {
-    let (addr, client) = spawn_test_server().await;
+    let (addr, client) = helpers::spawn_test_server().await;
 
     let slug = format!("duplicate-compat-{}", uuid::Uuid::new_v4());
-    
+
     let payload = json!({
         "name": "First Product",
         "slug": slug,
@@ -132,7 +102,7 @@ async fn test_compat_create_duplicate_slug_returns_409() {
 
 #[tokio::test]
 async fn test_compat_create_negative_price_returns_400() {
-    let (addr, client) = spawn_test_server().await;
+    let (addr, client) = helpers::spawn_test_server().await;
 
     let payload = json!({
         "name": "Bad Price",
@@ -155,7 +125,7 @@ async fn test_compat_create_negative_price_returns_400() {
 
 #[tokio::test]
 async fn test_native_create_still_works_regression() {
-    let (addr, client) = spawn_test_server().await;
+    let (addr, client) = helpers::spawn_test_server().await;
 
     let payload = json!({
         "title": "Native Product",

@@ -1,41 +1,14 @@
+mod helpers;
+
 use api::{AppState, config, create_app};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use serde_json::{json, Value};
 use uuid::Uuid;
-
-async fn spawn_test_server() -> (String, reqwest::Client, Arc<api::cache::CacheClient>) {
-    let config = config::Config::load();
-    let db_pool = db::create_pool(&config.database_url);
-
-    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
-    let cache_client = api::cache::CacheClient::new(&redis_url).unwrap();
-    let cache_arc = Arc::new(cache_client);
-
-    let state = AppState {
-        config: Arc::new(config),
-        db_pool,
-        cache: cache_arc.clone(),
-    };
-
-    let app = create_app(state);
-
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
-
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
-
-    let client = reqwest::Client::new();
-    let address = format!("http://127.0.0.1:{}", port);
-
-    (address, client, cache_arc)
-}
 
 #[tokio::test]
 async fn test_storefront_missing_product_returns_404() {
-    let (addr, client, _) = spawn_test_server().await;
+    let (addr, client, _) = helpers::spawn_test_server_with_cache().await;
 
     let response = client
         .get(format!("{}/products/missing-handle-123", addr))
@@ -48,7 +21,7 @@ async fn test_storefront_missing_product_returns_404() {
 
 #[tokio::test]
 async fn test_storefront_unpublished_product_returns_404() {
-    let (addr, client, _) = spawn_test_server().await;
+    let (addr, client, _) = helpers::spawn_test_server_with_cache().await;
 
     let handle = format!("test-handle-{}", Uuid::now_v7());
     let payload = json!({
@@ -60,7 +33,12 @@ async fn test_storefront_unpublished_product_returns_404() {
         "published": false
     });
 
-    client.post(format!("{}/api/products", addr)).json(&payload).send().await.unwrap();
+    client
+        .post(format!("{}/api/products", addr))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
 
     let response = client
         .get(format!("{}/products/{}", addr, handle))
@@ -73,7 +51,7 @@ async fn test_storefront_unpublished_product_returns_404() {
 
 #[tokio::test]
 async fn test_storefront_cache_hit_miss_and_invalidation() {
-    let (addr, client, cache) = spawn_test_server().await;
+    let (addr, client, cache) = helpers::spawn_test_server_with_cache().await;
 
     let handle = format!("test-handle-{}", Uuid::now_v7());
     let payload = json!({
@@ -86,7 +64,12 @@ async fn test_storefront_cache_hit_miss_and_invalidation() {
     });
 
     // 1. Create product
-    let create_res = client.post(format!("{}/api/products", addr)).json(&payload).send().await.unwrap();
+    let create_res = client
+        .post(format!("{}/api/products", addr))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(create_res.status(), 201);
     let created_product: Value = create_res.json().await.unwrap();
     let product_id = created_product["product"]["id"].as_str().unwrap();
@@ -97,30 +80,49 @@ async fn test_storefront_cache_hit_miss_and_invalidation() {
     assert!(cache.cache_get(&cache_key).await.is_none());
 
     // 2. First request (Miss -> DB -> Set Cache)
-    let response1 = client.get(format!("{}/products/{}", addr, handle)).send().await.unwrap();
+    let response1 = client
+        .get(format!("{}/products/{}", addr, handle))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response1.status(), 200);
     let html1 = response1.text().await.unwrap();
     assert!(html1.contains("Storefront Product"));
     assert!(html1.contains("$15.00"));
 
     // Wait a brief moment to ensure Redis SET async task finishes if any, wait cache_set is actually awaited in handler.
-    let cached_str = cache.cache_get(&cache_key).await.expect("Cache should be set");
+    let cached_str = cache
+        .cache_get(&cache_key)
+        .await
+        .expect("Cache should be set");
     assert!(cached_str.contains("Storefront Product"));
 
     // 3. Second request (Hit)
-    let response2 = client.get(format!("{}/products/{}", addr, handle)).send().await.unwrap();
+    let response2 = client
+        .get(format!("{}/products/{}", addr, handle))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response2.status(), 200);
 
     // 4. Update publication status
     let patch_payload = json!({ "published": false });
-    client.patch(format!("{}/api/products/{}/publication", addr, product_id))
-        .json(&patch_payload).send().await.unwrap();
+    client
+        .patch(format!("{}/api/products/{}/publication", addr, product_id))
+        .json(&patch_payload)
+        .send()
+        .await
+        .unwrap();
 
     // Cache should be deleted
     assert!(cache.cache_get(&cache_key).await.is_none());
 
     // 5. Request unpublished product returns 404
-    let response3 = client.get(format!("{}/products/{}", addr, handle)).send().await.unwrap();
+    let response3 = client
+        .get(format!("{}/products/{}", addr, handle))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response3.status(), 404);
 }
 
@@ -160,7 +162,12 @@ async fn test_storefront_redis_outage_fallback() {
         "published": true
     });
 
-    client.post(format!("{}/api/products", addr)).json(&payload).send().await.unwrap();
+    client
+        .post(format!("{}/api/products", addr))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
 
     let response = client
         .get(format!("{}/products/{}", addr, handle))

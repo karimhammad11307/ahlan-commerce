@@ -1,4 +1,7 @@
-.PHONY: run-api test db-start db-migrate health start stop redis-health
+.PHONY: run-api test db-start db-migrate health start stop redis-health docker-build docker-run-api prod-up prod-down prod-logs prod-migrate prod-health
+
+# When inside a Flatpak sandbox, delegate docker/pg_isready/redis-cli to the host.
+HOST := $(shell if command -v host-spawn >/dev/null 2>&1; then echo "host-spawn"; fi)
 
 run-api:
 	cargo run -p api --bin api
@@ -10,15 +13,23 @@ test:
 	cargo test
 
 redis-health:
-	redis-cli ping
-
+	@$(HOST) redis-cli ping
 
 db-start:
-	@if command -v docker >/dev/null 2>&1; then \
-		docker start ahlan_db || docker run -d --name ahlan_db -p 5432:5432 -e POSTGRES_USER=ahlan -e POSTGRES_PASSWORD=ahlan_dev -e POSTGRES_DB=ahlan_commerce postgres:15; \
+	@if $(HOST) docker ps >/dev/null 2>&1; then \
+		$(HOST) docker start ahlan_db 2>/dev/null || \
+		$(HOST) docker run -d --name ahlan_db -p 5432:5432 \
+			-e POSTGRES_USER=ahlan -e POSTGRES_PASSWORD=ahlan_dev \
+			-e POSTGRES_DB=ahlan_commerce postgres:15; \
+		echo "PostgreSQL ready (Docker)."; \
+	elif $(HOST) pg_isready -h localhost -p 5432 >/dev/null 2>&1; then \
+		:; \
 	else \
-		echo "Docker not found. Checking native PostgreSQL on port 5432..."; \
-		pg_isready -h localhost -p 5432 || (echo "Error: Native PostgreSQL is not running on port 5432!" && exit 1); \
+		echo "Error: PostgreSQL is not running on port 5432!"; \
+		if [ -n "$(HOST)" ]; then \
+			echo "Start it with: host-spawn service postgresql start"; \
+		fi; \
+		exit 1; \
 	fi
 
 db-migrate:
@@ -31,8 +42,8 @@ start:
 	mprocs
 
 stop:
-	@if command -v docker >/dev/null 2>&1; then \
-		docker stop ahlan_db; \
+	@if $(HOST) docker ps >/dev/null 2>&1; then \
+		$(HOST) docker stop ahlan_db; \
 	else \
 		echo "Using native PostgreSQL. No container to stop."; \
 	fi
@@ -48,10 +59,10 @@ docs-api-check: docs-api
 	git diff --exit-code docs/generated/ || (echo "Error: Generated docs are out of sync. Run 'make docs-api' and commit the changes." && exit 1)
 
 docker-build:
-	docker build -f apps/api/Dockerfile -t ahlan-api:latest .
+	$(HOST) docker build -f apps/api/Dockerfile -t ahlan-api:latest .
 
 docker-run-api:
-	docker run \
+	$(HOST) docker run \
 		-e DATABASE_URL=$(DATABASE_URL) \
 		-e REDIS_URL=$(REDIS_URL) \
 		-p 3000:3000 \
@@ -64,16 +75,16 @@ admin-preview:
 	cd apps/admin && npm run preview
 
 prod-up:
-	docker compose -f docker-compose.prod.yml up --build -d
+	$(HOST) docker compose -f docker-compose.prod.yml up --build -d
 
 prod-down:
-	docker compose -f docker-compose.prod.yml down
+	$(HOST) docker compose -f docker-compose.prod.yml down
 
 prod-logs:
-	docker compose -f docker-compose.prod.yml logs -f
+	$(HOST) docker compose -f docker-compose.prod.yml logs -f
 
 prod-migrate:
-	docker compose -f docker-compose.prod.yml exec api \
+	$(HOST) docker compose -f docker-compose.prod.yml exec api \
 		sh -c "atlas migrate apply --env production" 2>/dev/null || \
 		echo "Run atlas migrate apply manually with production DATABASE_URL"
 
